@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电子图书馆</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --success: #16a34a;
+            --danger: #dc2626;
+            --warning: #d97706;
+            --muted: #6b7280;
+            --border: #e5e7eb;
+            --bg: #f3f4f6;
+            --card: #ffffff;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            color: #111827;
+            min-height: 100vh;
+        }
+        /* 顶栏 */
+        .topbar {
+            position: sticky; top: 0; z-index: 20;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 28px; background: var(--primary); color: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,.12);
+        }
+        .brand { font-size: 20px; font-weight: 700; letter-spacing: 1px; }
+        .member-pick label { font-size: 14px; opacity: .9; }
+        .member-pick select {
+            margin-left: 8px; padding: 6px 10px; border-radius: 6px; border: none;
+            font-size: 14px; cursor: pointer;
+        }
+        /* 统计栏（线程池并行聚合三项计数） */
+        .stats-bar { display: flex; gap: 16px; margin-bottom: 22px; }
+        .stat {
+            flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+            padding: 16px 20px; display: flex; flex-direction: column; gap: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.05);
+        }
+        .stat-num { font-size: 28px; font-weight: 700; color: var(--primary); }
+        .stat-label { font-size: 13px; color: var(--muted); }
+        /* 标签页 */
+        .tabs {
+            display: flex; gap: 4px; padding: 0 28px; background: #fff;
+            border-bottom: 1px solid var(--border);
+        }
+        .tab {
+            padding: 14px 22px; border: none; background: none; cursor: pointer;
+            font-size: 15px; color: var(--muted); border-bottom: 3px solid transparent;
+            transition: all .15s;
+        }
+        .tab:hover { color: var(--primary); }
+        .tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+        main { max-width: 1100px; margin: 24px auto; padding: 0 28px; }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+        /* 工具条 */
+        .toolbar { display: flex; gap: 10px; margin-bottom: 18px; align-items: center; flex-wrap: wrap; }
+        .toolbar input {
+            flex: 1; min-width: 200px; padding: 9px 12px; border: 1px solid var(--border);
+            border-radius: 8px; font-size: 14px;
+        }
+        /* 卡片网格 */
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+        .card {
+            background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+            padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.05);
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .card h3 { font-size: 17px; }
+        .card .meta { font-size: 13px; color: var(--muted); }
+        .card .actions { display: flex; gap: 8px; margin-top: auto; padding-top: 10px; }
+        /* 徽章 */
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+        .badge.ok { background: #dcfce7; color: var(--success); }
+        .badge.no { background: #f3f4f6; color: var(--muted); }
+        .badge.loan { background: #dbeafe; color: var(--primary); }
+        .badge.done { background: #dcfce7; color: var(--success); }
+        .badge.overdue { background: #fee2e2; color: var(--danger); }
+        /* 按钮 */
+        button.btn {
+            padding: 7px 14px; border: none; border-radius: 7px; cursor: pointer;
+            font-size: 13px; font-weight: 600; transition: background .15s;
+        }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-primary:disabled { background: #9ca3af; cursor: not-allowed; }
+        .btn-ghost { background: #eef2ff; color: var(--primary); }
+        .btn-ghost:hover { background: #e0e7ff; }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-danger:hover { background: #b91c1c; }
+        /* 分页 */
+        .pager { display: flex; justify-content: center; align-items: center; gap: 14px; margin-top: 22px; }
+        .pager span { font-size: 14px; color: var(--muted); }
+        .empty { text-align: center; padding: 48px; color: var(--muted); font-size: 14px; }
+        /* 借阅列表 */
+        .loan-list { display: flex; flex-direction: column; gap: 10px; }
+        .loan-item {
+            background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+            padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        }
+        .loan-item .info { display: flex; flex-direction: column; gap: 4px; }
+        .loan-item .title { font-weight: 600; font-size: 15px; }
+        .loan-item .sub { font-size: 12px; color: var(--muted); }
+        /* 操作记录（事件总线快照） */
+        .events-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .events-title { font-size: 16px; margin-bottom: 12px; color: #374151; }
+        .event-list { display: flex; flex-direction: column; gap: 8px; }
+        .event-item {
+            background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+            padding: 12px 16px; font-size: 14px; display: flex; flex-direction: column; gap: 4px;
+        }
+        .event-item .who { font-weight: 600; }
+        .event-item .when { font-size: 12px; color: var(--muted); }
+        /* 表单 */
+        .form-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 560px; }
+        .form-row { margin-bottom: 16px; display: flex; flex-direction: column; gap: 6px; }
+        .form-row label { font-size: 14px; font-weight: 600; }
+        .form-row input, .form-row textarea {
+            padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px;
+            font-family: inherit;
+        }
+        .form-row textarea { resize: vertical; min-height: 80px; }
+        .form-row .hint { font-size: 12px; color: var(--muted); }
+        /* 模态框 */
+        .modal { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 50; }
+        .modal.hidden { display: none; }
+        .modal-box { background: #fff; border-radius: 12px; padding: 24px; max-width: 480px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,.2); }
+        .modal-box h3 { margin-bottom: 10px; }
+        .modal-box dl { display: grid; grid-template-columns: 90px 1fr; gap: 8px 12px; font-size: 14px; }
+        .modal-box dt { color: var(--muted); }
+        .modal-box .close { margin-top: 18px; text-align: right; }
+        /* Toast */
+        .toast {
+            position: fixed; top: 74px; left: 50%; transform: translateX(-50%) translateY(-20px);
+            padding: 10px 20px; border-radius: 8px; color: #fff; font-size: 14px; font-weight: 600;
+            opacity: 0; transition: all .25s; z-index: 100; pointer-events: none; max-width: 80vw;
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .toast.ok { background: var(--success); }
+        .toast.err { background: var(--danger); }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">📚 电子图书馆</div>
+        <div class="member-pick">
+            <label>当前会员：</label>
+            <select id="memberSelect"></select>
+        </div>
+    </header>
+
+    <nav class="tabs">
+        <button class="tab active" data-tab="books">书籍列表</button>
+        <button class="tab" data-tab="loans">我的借阅</button>
+        <button class="tab" data-tab="add">新增书籍</button>
+        <button class="tab" data-tab="events">操作记录</button>
+    </nav>
+
+    <main>
+        <!-- 统计栏：三项计数由 StatsService 在线程池上并行聚合 -->
+        <div id="statsBar" class="stats-bar">
+            <div class="stat"><span class="stat-num" id="statBooks">—</span><span class="stat-label">书籍总数</span></div>
+            <div class="stat"><span class="stat-num" id="statMembers">—</span><span class="stat-label">会员总数</span></div>
+            <div class="stat"><span class="stat-num" id="statActive">—</span><span class="stat-label">借阅中</span></div>
+        </div>
+
+        <!-- 书籍列表 -->
+        <section id="tab-books" class="tab-panel active">
+            <div class="toolbar">
+                <input id="searchInput" type="text" placeholder="按书名或作者搜索…" />
+                <button class="btn btn-primary" id="searchBtn">搜索</button>
+                <button class="btn btn-ghost" id="resetBtn">重置</button>
+            </div>
+            <div id="bookGrid" class="grid"></div>
+            <div id="bookPager" class="pager"></div>
+        </section>
+
+        <!-- 我的借阅 -->
+        <section id="tab-loans" class="tab-panel">
+            <div id="loanList" class="loan-list"></div>
+        </section>
+
+        <!-- 新增书籍 -->
+        <section id="tab-add" class="tab-panel">
+            <div class="form-card">
+                <div class="form-row">
+                    <label>ISBN *</label>
+                    <input id="f_isbn" type="text" placeholder="如 9787111213826" />
+                </div>
+                <div class="form-row">
+                    <label>书名 *</label>
+                    <input id="f_title" type="text" />
+                </div>
+                <div class="form-row">
+                    <label>作者</label>
+                    <input id="f_author" type="text" />
+                </div>
+                <div class="form-row">
+                    <label>内容简介</label>
+                    <textarea id="f_description"></textarea>
+                </div>
+                <div class="form-row">
+                    <label>总馆藏册数</label>
+                    <input id="f_totalCopies" type="number" min="1" value="1" />
+                    <span class="hint">新增时可借册数 = 总册数</span>
+                </div>
+                <button class="btn btn-primary" id="submitBook">提交新增</button>
+            </div>
+        </section>
+
+        <!-- 操作记录：事件总线（内存并发容器）的只读快照 -->
+        <section id="tab-events" class="tab-panel">
+            <div class="events-grid">
+                <div class="events-col">
+                    <h3 class="events-title">我的操作记录</h3>
+                    <div id="memberEvents" class="event-list"></div>
+                </div>
+                <div class="events-col">
+                    <h3 class="events-title">全局动态</h3>
+                    <div id="globalEvents" class="event-list"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="toast" class="toast"></div>
+
+    <!-- 书籍详情模态框 -->
+    <div id="detailModal" class="modal hidden">
+        <div class="modal-box">
+            <h3 id="d_title"></h3>
+            <dl id="d_body"></dl>
+            <div class="close"><button class="btn btn-ghost" onclick="closeDetail()">关闭</button></div>
+        </div>
+    </div>
+
+    <script>
+    /* =========================================================
+     * 统一请求层：所有响应均为 {code, msg, data}，code==="0" 视为成功
+     * ========================================================= */
+    const API = {
+        async call(method, path, { body, headers } = {}) {
+            const opts = { method, headers: { 'Content-Type': 'application/json' } };
+            if (body !== undefined) opts.body = JSON.stringify(body);
+            if (headers) Object.assign(opts.headers, headers);
+            const resp = await fetch(path, opts);
+            const json = await resp.json().catch(() => ({ code: String(resp.status), msg: resp.statusText }));
+            if (json.code !== '0') throw new Error(json.msg || ('请求失败 (' + resp.status + ')'));
+            return json.data;
+        },
+        get(path) { return this.call('GET', path); },
+        post(path, body, headers) { return this.call('POST', path, { body, headers }); }
+    };
+
+    /* ---------- 全局状态 ---------- */
+    const state = { currentMemberId: null, page: 0, size: 10, keyword: '', total: 0 };
+
+    /* ---------- 提示 ---------- */
+    let toastTimer;
+    function toast(msg, ok = true) {
+        const el = document.getElementById('toast');
+        el.textContent = msg;
+        el.className = 'toast show ' + (ok ? 'ok' : 'err');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => el.className = 'toast ' + (ok ? 'ok' : 'err'), 2200);
+    }
+
+    /* ---------- 标签页切换 ---------- */
+    document.querySelectorAll('.tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+            if (btn.dataset.tab === 'loans') loadLoans();
+            if (btn.dataset.tab === 'events') loadEvents();
+        });
+    });
+
+    /* ---------- 会员下拉 ---------- */
+    async function loadMembers() {
+        try {
+            const list = await API.get('/api/members');
+            const sel = document.getElementById('memberSelect');
+            sel.innerHTML = '';
+            list.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.id;
+                opt.textContent = m.name + '（' + m.email + '）';
+                sel.appendChild(opt);
+            });
+            if (list.length) {
+                state.currentMemberId = list[0].id;
+                sel.value = list[0].id;
+            }
+        } catch (e) { toast('加载会员失败：' + e.message, false); }
+    }
+    document.getElementById('memberSelect').addEventListener('change', e => {
+        state.currentMemberId = Number(e.target.value);
+        if (document.getElementById('tab-loans').classList.contains('active')) loadLoans();
+        if (document.getElementById('tab-events').classList.contains('active')) loadEvents();
+    });
+
+    /* ---------- 书籍列表 ---------- */
+    async function loadBooks() {
+        const grid = document.getElementById('bookGrid');
+        grid.innerHTML = '<div class="empty">加载中…</div>';
+        try {
+            const params = new URLSearchParams({ page: state.page, size: state.size });
+            if (state.keyword) params.set('keyword', state.keyword);
+            const data = await API.get('/api/books?' + params.toString());
+            state.total = data.total;
+            renderBooks(data.list || []);
+            renderPager();
+        } catch (e) {
+            grid.innerHTML = '';
+            document.getElementById('bookPager').innerHTML = '';
+            toast('加载书籍失败：' + e.message, false);
+        }
+    }
+    function renderBooks(list) {
+        const grid = document.getElementById('bookGrid');
+        if (!list.length) { grid.innerHTML = '<div class="empty">暂无书籍</div>'; return; }
+        grid.innerHTML = list.map(b => `
+            <div class="card">
+                <h3>${esc(b.title)}</h3>
+                <div class="meta">作者：${esc(b.author || '—')}</div>
+                <div class="meta">ISBN：${esc(b.isbn)}</div>
+                <div><span class="badge ${b.available ? 'ok' : 'no'}">${b.available ? '可借' : '暂无可借'}</span></div>
+                <div class="actions">
+                    <button class="btn btn-ghost" onclick="showDetail(${b.id})">详情</button>
+                    <button class="btn btn-primary" ${b.available ? '' : 'disabled'} onclick="borrowBook(${b.id})">借阅</button>
+                </div>
+            </div>
+        `).join('');
+    }
+    function renderPager() {
+        const pages = Math.max(1, Math.ceil(state.total / state.size));
+        const cur = state.page + 1;
+        document.getElementById('bookPager').innerHTML = `
+            <button class="btn btn-ghost" ${state.page === 0 ? 'disabled' : ''} onclick="gotoPage(${state.page - 1})">上一页</button>
+            <span>第 ${cur} 页 / 共 ${pages} 页（共 ${state.total} 条）</span>
+            <button class="btn btn-ghost" ${cur >= pages ? 'disabled' : ''} onclick="gotoPage(${state.page + 1})">下一页</button>
+        `;
+    }
+    function gotoPage(p) { state.page = p; loadBooks(); }
+    document.getElementById('searchBtn').addEventListener('click', () => {
+        state.keyword = document.getElementById('searchInput').value.trim();
+        state.page = 0; loadBooks();
+    });
+    document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('searchBtn').click(); });
+    document.getElementById('resetBtn').addEventListener('click', () => {
+        document.getElementById('searchInput').value = '';
+        state.keyword = ''; state.page = 0; loadBooks();
+    });
+
+    /* ---------- 书籍详情 ---------- */
+    async function showDetail(id) {
+        try {
+            const b = await API.get('/api/books/' + id);
+            document.getElementById('d_title').textContent = b.title;
+            document.getElementById('d_body').innerHTML = `
+                <dt>ISBN</dt><dd>${esc(b.isbn)}</dd>
+                <dt>作者</dt><dd>${esc(b.author || '—')}</dd>
+                <dt>总馆藏</dt><dd>${b.totalCopies} 册</dd>
+                <dt>可借状态</dt><dd><span class="badge ${b.available ? 'ok' : 'no'}">${b.available ? '可借' : '暂无可借'}</span></dd>
+                <dt>简介</dt><dd>${esc(b.description || '—')}</dd>
+            `;
+            document.getElementById('detailModal').classList.remove('hidden');
+        } catch (e) { toast('加载详情失败：' + e.message, false); }
+    }
+    function closeDetail() { document.getElementById('detailModal').classList.add('hidden'); }
+    document.getElementById('detailModal').addEventListener('click', e => { if (e.target.id === 'detailModal') closeDetail(); });
+
+    /* ---------- 借阅 ---------- */
+    async function borrowBook(bookId) {
+        if (!state.currentMemberId) { toast('请先选择当前会员', false); return; }
+        try {
+            await API.post('/api/loans', { bookId, memberId: state.currentMemberId });
+            toast('借阅成功');
+            loadBooks();
+            loadStats();
+            loadEvents();
+        } catch (e) { toast('借阅失败：' + e.message, false); }
+    }
+
+    /* ---------- 我的借阅 ---------- */
+    async function loadLoans() {
+        const box = document.getElementById('loanList');
+        if (!state.currentMemberId) { box.innerHTML = '<div class="empty">请先在顶部选择会员</div>'; return; }
+        box.innerHTML = '<div class="empty">加载中…</div>';
+        try {
+            const list = await API.get('/api/loans?memberId=' + state.currentMemberId);
+            if (!list.length) { box.innerHTML = '<div class="empty">暂无借阅记录</div>'; return; }
+            box.innerHTML = list.map(l => `
+                <div class="loan-item">
+                    <div class="info">
+                        <div class="title">${esc(l.bookTitle || '（书籍已删除）')}</div>
+                        <div class="sub">借出：${l.loanDate || '—'} ｜ 应还：${l.dueDate || '—'} ｜ 归还：${l.returnDate || '—'}</div>
+                        <div>
+                            <span class="badge ${l.status === 'ACTIVE' ? 'loan' : 'done'}">${l.status === 'ACTIVE' ? '借阅中' : '已归还'}</span>
+                            ${l.overdue ? '<span class="badge overdue">已逾期</span>' : ''}
+                        </div>
+                    </div>
+                    <div>
+                        ${l.status === 'ACTIVE' ? `<button class="btn btn-danger" onclick="returnLoan(${l.id})">归还</button>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        } catch (e) { box.innerHTML = ''; toast('加载借阅记录失败：' + e.message, false); }
+    }
+    async function returnLoan(loanId) {
+        try {
+            // 归还需通过 X-Member-Id 头校验归属
+            await API.post('/api/loans/' + loanId + '/return', null, { 'X-Member-Id': String(state.currentMemberId) });
+            toast('归还成功');
+            loadLoans();
+            loadBooks();
+            loadStats();
+            loadEvents();
+        } catch (e) { toast('归还失败：' + e.message, false); }
+    }
+
+    /* ---------- 新增书籍 ---------- */
+    document.getElementById('submitBook').addEventListener('click', async () => {
+        const payload = {
+            isbn: document.getElementById('f_isbn').value.trim(),
+            title: document.getElementById('f_title').value.trim(),
+            author: document.getElementById('f_author').value.trim(),
+            description: document.getElementById('f_description').value.trim(),
+            totalCopies: Number(document.getElementById('f_totalCopies').value) || 1
+        };
+        try {
+            await API.post('/api/books', payload);
+            toast('新增成功');
+            // 清空表单并切回列表
+            ['f_isbn','f_title','f_author','f_description'].forEach(id => document.getElementById(id).value = '');
+            document.getElementById('f_totalCopies').value = 1;
+            document.querySelector('.tab[data-tab="books"]').click();
+            loadBooks();
+            loadStats();
+        } catch (e) { toast('新增失败：' + e.message, false); }
+    });
+
+    /* ---------- 统计栏（线程池并行聚合三项计数） ---------- */
+    async function loadStats() {
+        try {
+            const s = await API.get('/api/stats/overview');
+            document.getElementById('statBooks').textContent = s.bookCount;
+            document.getElementById('statMembers').textContent = s.memberCount;
+            document.getElementById('statActive').textContent = s.activeLoanCount;
+        } catch (e) { /* 统计栏失败不阻断主流程 */ }
+    }
+
+    /* ---------- 操作记录（事件总线：内存并发容器快照） ---------- */
+    function fmtTime(t) {
+        return String(t == null ? '' : t).replace('T', ' ').slice(0, 16);
+    }
+    function renderEvents(container, list) {
+        if (!list.length) { container.innerHTML = '<div class="empty">暂无记录</div>'; return; }
+        container.innerHTML = list.map(e => {
+            const isReturn = e.action === 'RETURN';
+            const who = e.memberName || ('会员#' + e.memberId);
+            const verb = isReturn ? '归还了' : '借阅了';
+            const tag = isReturn ? 'done' : 'loan';
+            const badgeText = isReturn ? '归还' : '借阅';
+            return `
+                <div class="event-item">
+                    <div class="who">${esc(who)} <span class="badge ${tag}">${badgeText}</span> ${verb} ${esc(e.bookTitle || '（书籍已删除）')}</div>
+                    <div class="when">${fmtTime(e.time)}</div>
+                </div>
+            `;
+        }).join('');
+    }
+    async function loadEvents() {
+        const me = document.getElementById('memberEvents');
+        const gl = document.getElementById('globalEvents');
+        gl.innerHTML = '<div class="empty">加载中…</div>';
+        const globalList = await API.get('/api/events/recent').catch(() => []);
+        renderEvents(gl, globalList);
+        if (!state.currentMemberId) { me.innerHTML = '<div class="empty">请先在顶部选择会员</div>'; return; }
+        me.innerHTML = '<div class="empty">加载中…</div>';
+        const memberList = await API.get('/api/events/members/' + state.currentMemberId).catch(() => []);
+        renderEvents(me, memberList);
+    }
+
+    /* ---------- 工具：防 XSS 转义 ---------- */
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    /* ---------- 启动 ---------- */
+    (async () => {
+        await loadMembers();
+        loadBooks();
+        loadStats();
+    })();
+    </script>
+</body>
+</html>

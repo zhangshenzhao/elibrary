@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.elibrary.mapper.BookMapper">
+
+    <resultMap type="com.example.elibrary.vo.BookVo" id="BookMap">
+        <id property="id" column="id" jdbcType="BIGINT"/>
+        <result property="isbn" column="isbn" jdbcType="VARCHAR"/>
+        <result property="title" column="title" jdbcType="VARCHAR"/>
+        <result property="author" column="author" jdbcType="VARCHAR"/>
+        <result property="description" column="description" jdbcType="VARCHAR"/>
+        <result property="totalCopies" column="total_copies" jdbcType="INTEGER"/>
+        <result property="availableCopies" column="available_copies" jdbcType="INTEGER"/>
+        <result property="version" column="version" jdbcType="BIGINT"/>
+    </resultMap>
+
+    <!--根据主键查询书籍-->
+    <select id="selectById" resultMap="BookMap">
+        SELECT id, isbn, title, author, description, total_copies, available_copies, version
+        FROM book
+        WHERE id = #{id}
+    </select>
+
+    <!--统计指定 ISBN 数量-->
+    <select id="countByIsbn" resultType="int">
+        SELECT COUNT(1) FROM book WHERE isbn = #{isbn}
+    </select>
+
+    <!--分页查询书籍：keyword 非空时模糊匹配书名或作者-->
+    <select id="selectPage" resultMap="BookMap">
+        SELECT id, isbn, title, author, description, total_copies, available_copies, version
+        FROM book
+        <if test="keyword != null and keyword != ''">
+            WHERE title LIKE CONCAT('%', #{keyword}, '%')
+               OR author LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+        ORDER BY id DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <!--分页查询总数-->
+    <select id="countPage" resultType="long">
+        SELECT COUNT(1)
+        FROM book
+        <if test="keyword != null and keyword != ''">
+            WHERE title LIKE CONCAT('%', #{keyword}, '%')
+               OR author LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+    </select>
+
+    <!--新增书籍，回填自增主键-->
+    <insert id="insert" parameterType="com.example.elibrary.vo.BookVo" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO book (isbn, title, author, description, total_copies, available_copies)
+        VALUES (#{isbn}, #{title}, #{author}, #{description}, #{totalCopies}, #{availableCopies})
+    </insert>
+
+    <!--借出一册：原子扣减，仅当有可借库存时成功-->
+    <update id="decrementAvailable">
+        UPDATE book
+        SET available_copies = available_copies - 1, version = version + 1
+        WHERE id = #{id} AND available_copies > 0
+    </update>
+
+    <!--归还一册：原子回补，仅当未超总馆藏时成功-->
+    <update id="incrementAvailable">
+        UPDATE book
+        SET available_copies = available_copies + 1, version = version + 1
+        WHERE id = #{id} AND available_copies &lt; total_copies
+    </update>
+
+</mapper>

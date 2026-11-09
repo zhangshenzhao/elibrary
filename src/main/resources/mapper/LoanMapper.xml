@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.elibrary.mapper.LoanMapper">
+
+    <resultMap type="com.example.elibrary.vo.LoanVo" id="LoanMap">
+        <id property="id" column="id" jdbcType="BIGINT"/>
+        <result property="bookId" column="book_id" jdbcType="BIGINT"/>
+        <result property="memberId" column="member_id" jdbcType="BIGINT"/>
+        <result property="loanDate" column="loan_date" jdbcType="DATE"/>
+        <result property="dueDate" column="due_date" jdbcType="DATE"/>
+        <result property="returnDate" column="return_date" jdbcType="DATE"/>
+        <result property="status" column="status" jdbcType="VARCHAR"/>
+        <result property="version" column="version" jdbcType="BIGINT"/>
+    </resultMap>
+
+    <!--根据主键查询借阅记录-->
+    <select id="selectById" resultMap="LoanMap">
+        SELECT id, book_id, member_id, loan_date, due_date, return_date, status, version
+        FROM loan
+        WHERE id = #{id}
+    </select>
+
+    <!--查询某会员对某本书的未归还借阅记录-->
+    <select id="selectActiveByBookAndMember" resultMap="LoanMap">
+        SELECT id, book_id, member_id, loan_date, due_date, return_date, status, version
+        FROM loan
+        WHERE book_id = #{bookId} AND member_id = #{memberId} AND status = 'ACTIVE'
+        LIMIT 1
+    </select>
+
+    <!--查询某会员的借阅记录：activeOnly=true 只看未归还-->
+    <select id="selectByMember" resultMap="LoanMap">
+        SELECT id, book_id, member_id, loan_date, due_date, return_date, status, version
+        FROM loan
+        WHERE member_id = #{memberId}
+        <if test="activeOnly">
+            AND status = 'ACTIVE'
+        </if>
+        ORDER BY loan_date DESC
+    </select>
+
+    <!--统计活跃（未归还）借阅总数-->
+    <select id="countActive" resultType="int">
+        SELECT COUNT(1) FROM loan WHERE status = 'ACTIVE'
+    </select>
+
+    <!--新增借阅记录：原子写入，NOT EXISTS 保证同一会员同一本书最多一条活跃借阅（防并发重复借阅），回填自增主键-->
+    <insert id="insert" parameterType="com.example.elibrary.vo.LoanVo" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO loan (book_id, member_id, loan_date, due_date, return_date, status)
+        SELECT #{bookId}, #{memberId}, #{loanDate}, #{dueDate}, #{returnDate}, #{status}
+        FROM DUAL
+        WHERE NOT EXISTS (
+            SELECT 1 FROM loan WHERE book_id = #{bookId} AND member_id = #{memberId} AND status = 'ACTIVE'
+        )
+    </insert>
+
+    <!--归还：仅活跃记录可更新，返回受影响行数（0 表示已归还或并发冲突）-->
+    <update id="markReturned">
+        UPDATE loan
+        SET status = 'RETURNED', return_date = #{returnDate}, version = version + 1
+        WHERE id = #{id} AND status = 'ACTIVE'
+    </update>
+
+</mapper>

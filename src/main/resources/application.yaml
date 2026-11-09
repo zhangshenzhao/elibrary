@@ -1,0 +1,37 @@
+# 电子图书馆服务配置
+server:
+  port: 8080
+spring:
+  datasource:
+    druid:
+      elibrary:
+        url: jdbc:mysql://101.201.210.168:3306/elibrary?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+        username: root
+        password: Root@123456
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        initial-size: 5
+        min-idle: 5
+        # 物理连接池上限与 DbConcurrencyInterceptor 的 Semaphore(10) 对齐，双层限制并发访问 MySQL 不超过 10
+        max-active: 10
+        max-wait: 60000
+        validation-query: SELECT 1
+        test-on-borrow: true
+        test-while-idle: true
+        time-between-eviction-runs-millis: 60000
+        min-evictable-idle-time-millis: 300000
+  # 日期序列化：借还日期统一 yyyy-MM-dd
+  jackson:
+    date-format: yyyy-MM-dd
+    serialization:
+      write-dates-as-timestamps: false
+# MyBatis 配置
+mybatis:
+  mapper-locations: classpath*:mapper/*.xml
+  type-aliases-package: com.example.elibrary.vo
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+logging:
+  level:
+    com.example.elibrary: debug

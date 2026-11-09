@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.elibrary.mapper.MemberMapper">
+
+    <resultMap type="com.example.elibrary.vo.MemberVo" id="MemberMap">
+        <id property="id" column="id" jdbcType="BIGINT"/>
+        <result property="name" column="name" jdbcType="VARCHAR"/>
+        <result property="email" column="email" jdbcType="VARCHAR"/>
+    </resultMap>
+
+    <!--根据主键查询会员-->
+    <select id="selectById" resultMap="MemberMap">
+        SELECT id, name, email
+        FROM member
+        WHERE id = #{id}
+    </select>
+
+    <!--查询全部会员，按 id 升序-->
+    <select id="selectAll" resultMap="MemberMap">
+        SELECT id, name, email
+        FROM member
+        ORDER BY id ASC
+    </select>
+
+    <!--统计指定邮箱数量-->
+    <select id="countByEmail" resultType="int">
+        SELECT COUNT(1) FROM member WHERE email = #{email}
+    </select>
+
+    <!--统计会员总数-->
+    <select id="countAll" resultType="int">
+        SELECT COUNT(1) FROM member
+    </select>
+
+    <!--新增会员，回填自增主键-->
+    <insert id="insert" parameterType="com.example.elibrary.vo.MemberVo" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO member (name, email)
+        VALUES (#{name}, #{email})
+    </insert>
+
+</mapper>

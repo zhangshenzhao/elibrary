@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.elibrary.mapper.SystemMapper">
+
+    <!--并发探针：持有连接 sec 秒。SLEEP 正常返回 0，被中断返回 1-->
+    <select id="sleep" resultType="int">
+        SELECT SLEEP(#{sec})
+    </select>
+
+</mapper>
